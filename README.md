@@ -505,7 +505,7 @@ python -m json.tool _conf_schema.json
 - 命令组：`/qqyy`
 - 当前版本：`5.9.0`
 - 作者：`27xk`
-- 仓库：[27chcn/astrbot_plugin_qqyy](https://github.com/27chcn/astrbot_plugin_qqyy)
+- 仓库：[27xk/astrbot_plugin_qqyy](https://github.com/27xk/astrbot_plugin_qqyy)
 
 ## 参考链接
 

@@ -4,4 +4,4 @@ display_name: QQ 音乐报告与网易云登录
 desc: 在 AstrBot 中扫码登录 QQ 音乐和网易云、管理多账号，查询 QQ 音乐信息与听歌报告，并控制后台任务；通过用户自行配置的 HTTP 服务调用接口。
 version: 5.9.0
 author: 27xk
-repo: https://github.com/27chcn/astrbot_plugin_qqyy
+repo: https://github.com/27xk/astrbot_plugin_qqyy
