@@ -18,10 +18,86 @@
         "description": "允许使用插件的群 ID 列表",
         "default": []
       },
+      "delegate_user_ids": {
+        "type": "list",
+        "description": "允许通过回复消息代查群成员账号的用户 ID 列表；为空时复用 allowed_user_ids，群白名单成员不会自动获得代查权限",
+        "default": []
+      },
       "deny_message": {
         "type": "string",
         "description": "访问被拒绝时的提示语",
         "default": "当前用户或群组未被允许使用 QQ 音乐听歌报告插件"
+      }
+    }
+  },
+  "qqyy_api": {
+    "type": "object",
+    "description": "QQ 音乐与网易云共用 HTTP API 设置，对接 qqyy-php 项目的 qqmusic_api.php",
+    "items": {
+      "url": {
+        "type": "string",
+        "description": "填写你部署的 HTTP 接口地址；可填完整接口地址，或以 / 结尾的部署目录地址；没有默认站点",
+        "default": ""
+      },
+      "token": {
+        "type": "string",
+        "description": "接口访问令牌；为空时不发送 X-QQYY-API-Token 请求头",
+        "default": ""
+      },
+      "mobile_url": {
+        "type": "string",
+        "description": "手机 QQ 音乐扫码接口地址，生成与监听使用同一入口；为空时按 url 同目录自动推导 qqmusic_mobile_login.php",
+        "default": ""
+      }
+    }
+  },
+  "login": {
+    "type": "object",
+    "description": "QQ 音乐和网易云扫码登录设置",
+    "items": {
+      "qq_login_type": {
+        "type": "string",
+        "description": "QQ 音乐扫码方式：mobile 使用手机 QQ 音乐 App；qq 使用手机 QQ；wx 使用微信",
+        "options": ["mobile", "qq", "wx"],
+        "default": "mobile"
+      },
+      "netease_client_platform": {
+        "type": "string",
+        "description": "网易云二维码客户端类型，与上游 client_platform 对应",
+        "options": ["pc", "web"],
+        "default": "pc"
+      },
+      "timeout_seconds": {
+        "type": "int",
+        "description": "扫码登录等待时间，单位秒，有效范围 1-600；手机 QQ 音乐使用长连接监听，代理的超时应大于此值",
+        "default": 180
+      }
+    }
+  },
+  "background_tasks": {
+    "type": "object",
+    "description": "插件本地后台任务总开关；服务端已负责自动任务时可关闭",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "是否允许本地每日刷新、签到和自动刷时长；管理员可用 /qqyy 关闭后台任务 或 /qqyy 开启后台任务 切换，关闭时会停止正在运行的任务",
+        "default": true
+      }
+    }
+  },
+  "daily_refresh": {
+    "type": "object",
+    "description": "每日 0 点自动刷新 QQ 音乐服务端登录缓存、签到积分与群通知设置",
+    "items": {
+      "enabled": {
+        "type": "bool",
+        "description": "是否启用每日 0 点自动刷新所有已绑定账号的服务端登录缓存、自动签到积分，并在刷新成功后持续刷时长到信息显示 24 小时",
+        "default": true
+      },
+      "notify_enabled": {
+        "type": "bool",
+        "description": "是否向已开启日更通知的群主动发送刷新结果",
+        "default": true
       }
     }
   }

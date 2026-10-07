@@ -1,7 +1,7 @@
 name: astrbot_plugin_qqyy
-display_name: QQ 音乐听歌报告
+display_name: QQ 音乐报告与网易云登录
 
-desc: QQ 音乐听歌报告插件，支持多账号绑定、本地持久化、扫码登录、密钥刷新、刷时长、自动刷时长与信息和年月周日报查询。
-version: 5.8.0
-author: 27chcn
-repo: ""
+desc: 在 AstrBot 中扫码登录 QQ 音乐和网易云、管理多账号，查询 QQ 音乐信息与听歌报告，并控制后台任务；通过用户自行配置的 HTTP 服务调用接口。
+version: 5.9.0
+author: 27xk
+repo: https://github.com/27chcn/astrbot_plugin_qqyy

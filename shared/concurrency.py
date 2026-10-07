@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Callable, Iterable, TypeVar
-
+from typing import TypeVar
 
 T = TypeVar("T")
 R = TypeVar("R")
@@ -28,10 +28,19 @@ async def run_blocking_batch(
 
     worker_count = max(1, min(len(item_list), max_workers))
     loop = asyncio.get_running_loop()
-    with ThreadPoolExecutor(max_workers=worker_count) as pool:
-        futures: list[asyncio.Future[R]] = []
+    pool = ThreadPoolExecutor(max_workers=worker_count)
+    futures: list[asyncio.Future[R]] = []
+    cancelled = False
+    try:
         for index, item in enumerate(item_list):
             if index > 0 and submit_delay_seconds > 0:
                 await asyncio.sleep(submit_delay_seconds)
             futures.append(loop.run_in_executor(pool, worker, item))
         return list(await asyncio.gather(*futures, return_exceptions=return_exceptions))
+    except asyncio.CancelledError:
+        cancelled = True
+        for future in futures:
+            future.cancel()
+        raise
+    finally:
+        pool.shutdown(wait=not cancelled, cancel_futures=cancelled)

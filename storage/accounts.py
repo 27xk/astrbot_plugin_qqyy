@@ -3,10 +3,9 @@ from __future__ import annotations
 import json
 import os
 import tempfile
-from threading import RLock
 from dataclasses import dataclass
 from pathlib import Path
-from time import time
+from threading import RLock
 from typing import Any
 
 
@@ -26,14 +25,27 @@ class AccountSelectionError(AccountStoreError):
 class StoredAccount:
     alias: str
     uin: str
-    qqmusic_key: str
-    updated_at: int
-    credential: str | None = None
+
+
+@dataclass(frozen=True)
+class StoredUserAccount:
+    user_key: str
+    account: StoredAccount
 
 
 class AccountStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        id_field: str = "uin",
+        platform_name: str = "QQ 音乐",
+        login_command: str = "/qqyy 登录",
+    ) -> None:
         self.path = path
+        self.id_field = id_field
+        self.platform_name = platform_name
+        self.login_command = login_command
         self._lock = RLock()
 
     def _load(self) -> dict[str, Any]:
@@ -54,6 +66,7 @@ class AccountStore:
 
     def _save(self, payload: dict[str, Any]) -> None:
         with self._lock:
+            payload = self._normalize_payload_for_save(payload)
             self.path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(
                 prefix=f".{self.path.name}.",
@@ -80,7 +93,9 @@ class AccountStore:
         return normalized
 
     @staticmethod
-    def _get_user_record(payload: dict[str, Any], user_key: str) -> dict[str, Any] | None:
+    def _get_user_record(
+        payload: dict[str, Any], user_key: str
+    ) -> dict[str, Any] | None:
         user_record = payload.get(user_key)
         return user_record if isinstance(user_record, dict) else None
 
@@ -91,35 +106,58 @@ class AccountStore:
         accounts = user_record.get("accounts")
         return accounts if isinstance(accounts, dict) else {}
 
-    @staticmethod
-    def _build_stored_account(alias: Any, account: Any) -> StoredAccount | None:
+    def _normalize_payload_for_save(self, payload: dict[str, Any]) -> dict[str, Any]:
+        normalized: dict[str, Any] = {}
+        for user_key, user_record in payload.items():
+            if not isinstance(user_key, str) or not isinstance(user_record, dict):
+                continue
+
+            accounts: dict[str, Any] = {}
+            for alias, account in self._get_accounts(user_record).items():
+                if not isinstance(alias, str) or not isinstance(account, dict):
+                    continue
+
+                uin = account.get(self.id_field)
+                if isinstance(uin, str) and uin.strip():
+                    accounts[alias] = {self.id_field: uin.strip()}
+
+            if not accounts:
+                continue
+
+            default_account = user_record.get("default_account")
+            if not isinstance(default_account, str) or default_account not in accounts:
+                default_account = next(iter(accounts))
+
+            normalized[user_key] = {
+                "default_account": default_account,
+                "accounts": accounts,
+            }
+
+        return normalized
+
+    def _build_stored_account(self, alias: Any, account: Any) -> StoredAccount | None:
         if not isinstance(alias, str) or not isinstance(account, dict):
             return None
 
-        uin = account.get("uin")
-        qqmusic_key = account.get("qqmusic_key")
-        updated_at = account.get("updated_at")
-        if not isinstance(uin, str) or not isinstance(qqmusic_key, str) or not isinstance(updated_at, int):
+        uin = account.get(self.id_field)
+        if not isinstance(uin, str):
             return None
-
-        credential = account.get("credential")
-        if not isinstance(credential, str):
-            credential = None
 
         return StoredAccount(
             alias=alias,
             uin=uin,
-            qqmusic_key=qqmusic_key,
-            updated_at=updated_at,
-            credential=credential,
         )
 
-    def upsert_account(self, user_key: str, alias: str, uin: str, qqmusic_key: str, credential: str | None = None) -> None:
+    def upsert_account(
+        self,
+        user_key: str,
+        alias: str,
+        uin: str,
+    ) -> None:
         with self._lock:
             user_key = self._require_non_empty(user_key, "user_key")
             alias = self._require_non_empty(alias, "alias")
             uin = self._require_non_empty(uin, "uin")
-            qqmusic_key = self._require_non_empty(qqmusic_key, "qqmusic_key")
 
             payload = self._load()
             user_record = self._get_user_record(payload, user_key)
@@ -129,27 +167,19 @@ class AccountStore:
 
             accounts = self._get_accounts(user_record)
             user_record["accounts"] = accounts
-            updated_at = int(time())
+            accounts[alias] = {self.id_field: uin}
 
-            entry: dict[str, Any] = {
-                "uin": uin,
-                "qqmusic_key": qqmusic_key,
-                "updated_at": updated_at,
-            }
-            if credential is not None:
-                entry["credential"] = credential
-            accounts[alias] = entry
-
-            if not isinstance(user_record.get("default_account"), str) or not user_record.get("default_account"):
+            if not isinstance(
+                user_record.get("default_account"), str
+            ) or not user_record.get("default_account"):
                 user_record["default_account"] = alias
 
             self._save(payload)
 
-    @classmethod
-    def _list_valid_accounts(cls, accounts: dict[str, Any]) -> list[StoredAccount]:
+    def _list_valid_accounts(self, accounts: dict[str, Any]) -> list[StoredAccount]:
         result: list[StoredAccount] = []
         for alias, account in accounts.items():
-            stored_account = cls._build_stored_account(alias, account)
+            stored_account = self._build_stored_account(alias, account)
             if stored_account is not None:
                 result.append(stored_account)
         return result
@@ -159,6 +189,19 @@ class AccountStore:
         user_record = self._get_user_record(payload, user_key)
         accounts = self._get_accounts(user_record)
         return self._list_valid_accounts(accounts)
+
+    def list_all_accounts(self) -> list[StoredUserAccount]:
+        payload = self._load()
+        result: list[StoredUserAccount] = []
+        for user_key, user_record in payload.items():
+            if not isinstance(user_key, str):
+                continue
+            accounts = self._get_accounts(
+                user_record if isinstance(user_record, dict) else None
+            )
+            for account in self._list_valid_accounts(accounts):
+                result.append(StoredUserAccount(user_key=user_key, account=account))
+        return result
 
     def get_default_alias(self, user_key: str) -> str:
         payload = self._load()
@@ -204,29 +247,6 @@ class AccountStore:
 
             self._save(payload)
 
-    def update_account_key(self, user_key: str, alias: str, qqmusic_key: str, credential: str | None = None) -> None:
-        with self._lock:
-            user_key = self._require_non_empty(user_key, "user_key")
-            alias = self._require_non_empty(alias, "alias")
-            qqmusic_key = self._require_non_empty(qqmusic_key, "qqmusic_key")
-
-            payload = self._load()
-            user_record = self._get_user_record(payload, user_key)
-            if not user_record:
-                raise AccountNotFoundError(f"未找到别名为 {alias} 的账号")
-
-            accounts = self._get_accounts(user_record)
-            account = accounts.get(alias)
-            if not isinstance(account, dict):
-                raise AccountNotFoundError(f"未找到别名为 {alias} 的账号")
-
-            account["qqmusic_key"] = qqmusic_key
-            account["updated_at"] = int(time())
-            if credential is not None:
-                account["credential"] = credential
-
-            self._save(payload)
-
     def resolve_account(self, user_key: str, alias: str | None = None) -> StoredAccount:
         payload = self._load()
         user_record = self._get_user_record(payload, user_key)
@@ -234,7 +254,7 @@ class AccountStore:
         valid_accounts = self._list_valid_accounts(accounts)
         if not valid_accounts:
             raise AccountNotFoundError(
-                "你还没有绑定 QQ 音乐账号，请先使用 /qqyy 绑定 <别名> <uin> <qqmusic_key>"
+                f"你还没有绑定{self.platform_name}账号，请先使用 {self.login_command}"
             )
 
         if alias is not None:
@@ -245,7 +265,9 @@ class AccountStore:
 
         default_alias = user_record.get("default_account") if user_record else None
         if isinstance(default_alias, str) and default_alias:
-            default_account = self._build_stored_account(default_alias, accounts.get(default_alias))
+            default_account = self._build_stored_account(
+                default_alias, accounts.get(default_alias)
+            )
             if default_account is not None:
                 return default_account
 
